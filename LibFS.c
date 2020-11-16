@@ -214,6 +214,8 @@ static int bitmap_first_unused(int start, int num, int nbits)
                             //Write the flipped value to Disk
                             if(Disk_Write(start + i, temp_buffer) != 0)
                                 location = -1;
+                            else
+                                FS_Sync();
                         }
                         j = SECTOR_SIZE;
                         i = num;
@@ -224,6 +226,9 @@ static int bitmap_first_unused(int start, int num, int nbits)
         }
     }
   }
+
+  //Free the dynamic memory
+  free(temp_buffer);
 
   return location;
 }
