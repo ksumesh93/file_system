@@ -150,6 +150,9 @@ static void bitmap_init(int start, int num, int nbits)
   //Sync the disk with the file
   FS_Sync();
 
+  //Free the memory allocated from the heap
+  free(temp_buffer);
+
 }
 
 // set the first unused bit from a bitmap of 'nbits' bits (flip the
