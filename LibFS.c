@@ -296,8 +296,28 @@ static int bitmap_reset(int start, int num, int ibit)
 // should not be more than MAX_NAME-1 in length
 static int illegal_filename(char* name)
 {
-  /* YOUR CODE */
-  return 1; 
+  //Variable to track status
+  int status = 0;
+  int length = strlen(name);
+  
+  if(length >= MAX_NAME)
+  {
+    status = 1;
+    length = -1;
+  }
+    
+  for(int i = 0; i < length; i++)
+  {
+    if(name[i] >= 65 || name[i] <= 90 || name[i] >= 97 || name[i] <= 122 || name[i] >= 48 || name[i] <= 57 || name[i] == 45 || name[i] == 46 || name[i] == 95)
+        continue;
+    else
+    {
+        status = 1;
+        break;
+    }
+  }
+
+  return status; 
 }
 
 // return the child inode of the given file name 'fname' from the
