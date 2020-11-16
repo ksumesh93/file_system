@@ -117,7 +117,39 @@ static int check_magic()
 // 'nbits' number of bits are set to one
 static void bitmap_init(int start, int num, int nbits)
 {
-  /* YOUR CODE */
+  //Creating a temporary buffer to hold the bitmap which needs to be written to the required number of sectors
+  char *temp_buffer;
+
+  //Finding the maximum size of the bitmap
+  int max_size = num * SECTOR_SIZE;
+
+  //Allocating memory from heap to create the bitmap which we shall then write to the disk
+  //This gives us a bitmap with 0 written for all bits
+  temp_buffer = (char *) calloc(TOTAL_SECTORS, SECTOR_SIZE);
+
+  //Now we just need to set the first nbits to 1
+  unsigned int nbytes = nbits / 8;
+  int rem_bits = nbits % 8;
+  int val = 255;
+  if(nbytes > 0 && nbytes < max_size){
+      memset((void *) temp_buffer, val, nbytes);
+  
+      //We have copied the number of bytes and now we need to set the remaining number of bits
+      //First we need to find the correct mask 
+      if(rem_bits > 0)
+      {
+        val = (1 << rem_bits) - 1;
+        memset((void *) (temp_buffer + nbytes), val, 1);
+      }
+  }
+
+  //Write the buffer in the disk, we need a for loop here since there may be more than one sector to be written
+  for(int i = 0; i < num; i++)
+    Disk_Write(start + i, temp_buffer + i * SECTOR_SIZE);
+ 
+  //Sync the disk with the file
+  FS_Sync();
+
 }
 
 // set the first unused bit from a bitmap of 'nbits' bits (flip the
