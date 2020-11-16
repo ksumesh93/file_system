@@ -232,8 +232,57 @@ static int bitmap_first_unused(int start, int num, int nbits)
 // 'start' sector; return 0 if successful, -1 otherwise
 static int bitmap_reset(int start, int num, int ibit)
 {
-  /* YOUR CODE */
-  return -1;
+  //Variable to track status of execution
+  int status = 0;
+
+  //Variable to find the sector number where our ibit exists
+  int sector_num = 0;
+    
+  //Variable to find ibits_per_sector
+  int ibits_per_sector = SECTOR_SIZE * 8;
+
+  sector_num = ibit/ibits_per_sector;
+    
+  //First we need to allocate a buffer with size equal to that of sector size so that we can read a sector
+  char *temp_buffer;
+  temp_buffer = (char *) calloc(1, SECTOR_SIZE);
+  char temp_byte = 0;
+  int ibyte = 0;
+  int rem_bit = 0;
+
+  //Find if the provided ibit is valid or not
+  if(sector_num < num)
+  {
+    //Read the sector containing our bit
+    if(Disk_Read(start + sector_num, temp_buffer) == 0)
+    {
+        //Move the ibit location to adjust for the current sector we just read
+        ibit = ibit - ibits_per_sector * sector_num;
+        ibyte = ibit/8;
+        rem_bit = 8 - ibit % 8;
+        //Read the byte which contains our bit
+        temp_byte = *(temp_buffer + ibyte);
+        //Modify
+        temp_byte = temp_byte & (~(1 << rem_bit));
+        //Write
+        *(temp_buffer + ibyte) = temp_byte;
+        //Write to disk
+        if(Disk_Write(start + sector_num, temp_buffer) != 0)
+            status = -1;
+        else
+            //Sync the disk
+            FS_Sync();
+    }
+    else
+        status = -1;
+  }
+  else
+    status = -1;
+
+  //Free the dynamic memory
+  free(temp_buffer);
+
+  return status;
 }
 
 // return 1 if the file name is illegal; otherwise, return 0; legal
