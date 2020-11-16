@@ -129,7 +129,7 @@ static void bitmap_init(int start, int num, int nbits)
 
   //Now we just need to set the first nbits to 1
   unsigned int nbytes = nbits / 8;
-  int rem_bits = nbits % 8;
+  int rem_bits = 8 - nbits % 8;
   int val = 255;
   if(nbytes > 0 && nbytes < max_size){
       memset((void *) temp_buffer, val, nbytes);
