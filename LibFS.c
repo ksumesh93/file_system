@@ -160,8 +160,72 @@ static void bitmap_init(int start, int num, int nbits)
 // return -1 if the bitmap is already full (no more zeros)
 static int bitmap_first_unused(int start, int num, int nbits)
 {
-  /* YOUR CODE */
-  return -1;
+  //Creating an integer to keep track of the first found 0 in the bitmap
+  int location = 0;
+    
+  //First we need to allocate a buffer with size equal to that of sector size so that we can read each sector
+  char *temp_buffer;
+  temp_buffer = (char *) calloc(1, SECTOR_SIZE);
+
+  char temp_byte = 0;
+    
+  //Now we need to read each sector one by one
+  for(int i = 0; i < num; i++)
+  {
+    if(Disk_Read(start + i, temp_buffer) == 0)
+    {
+        //Now we need to go byte by byte to find the first 0 bit in the bitmap
+        for(int j = 0; j < SECTOR_SIZE; j++)
+        {
+            //read the byte
+            temp_byte = *(temp_buffer + j);
+            
+            //check if the byte has any zeros at all
+            if(temp_byte == 0xFF)
+            {
+                //if there are no zero bits in this byte move the location pointer by 8 bits
+                location = location + 8;
+
+                //Check if the total size of bitmap has reached in which case we need to break and exit
+                if(location >= nbits)
+                {
+                    i = num;
+                    location = -1;
+                    break;  
+                }
+            }
+            //If the byte has a zero bit
+            else
+            {
+                //Shift the byte towards right one by one to check every bit and find the location of the zero bit
+                for(int k = 0; k < 8; k++)
+                {
+                    if(((temp_byte >> k) & 1) == 0)
+                    {
+                        location = location + k;
+                        //Check if we have crossed the total size of the bitmap
+                        if(location >= nbits)
+                            location = -1;
+                        else
+                        {
+                            //Flip the zero bit to 1
+                            temp_byte = temp_byte | (1 << k);
+                            *(temp_buffer + j) = temp_byte;
+                            //Write the flipped value to Disk
+                            if(Disk_Write(start + i, temp_buffer) != 0)
+                                location = -1;
+                        }
+                        j = SECTOR_SIZE;
+                        i = num;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+  }
+
+  return location;
 }
 
 // reset the i-th bit of a bitmap with 'num' sectors starting from
