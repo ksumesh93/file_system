@@ -559,6 +559,17 @@ int remove_inode(int type, int parent_inode, int child_inode)
 {
   //Variable to track status of execution
   int status = 0;  
+  int inode_sector;
+  char inode_buffer[SECTOR_SIZE];
+  int inode_start_entry;
+  int offset;
+  inode_t* parent;
+  char dirent_buffer[SECTOR_SIZE];
+  dirent_t last_dirent;
+  dirent_t* dirent;
+  int found = 0;
+  int group;
+  inode_t* child;
 
   if(status == 0)
   {
@@ -575,7 +586,7 @@ int remove_inode(int type, int parent_inode, int child_inode)
       inode_start_entry = (inode_sector-INODE_TABLE_START_SECTOR)*INODES_PER_SECTOR;
       offset = parent_inode-inode_start_entry;
       assert(0 <= offset && offset < INODES_PER_SECTOR);
-      inode_t* parent = (inode_t*)(inode_buffer+offset*sizeof(inode_t));
+      parent = (inode_t*)(inode_buffer+offset*sizeof(inode_t));
       dprintf("... get parent inode %d (size=%d, type=%d)\n",
 	     parent_inode, parent->size, parent->type);
 
@@ -588,11 +599,7 @@ int remove_inode(int type, int parent_inode, int child_inode)
 
   if(status == 0)
   {
-    int group = parent->size/DIRENTS_PER_SECTOR;
-    char dirent_buffer[SECTOR_SIZE];
-    dirent_t last_dirent;
-    dirent_t* dirent;
-    int found = 0;
+    group = parent->size/DIRENTS_PER_SECTOR;
     //Get last directory entry to replace with child's entry
     if(group*DIRENTS_PER_SECTOR == parent->size) 
     {  
@@ -609,14 +616,14 @@ int remove_inode(int type, int parent_inode, int child_inode)
   if(status == 0)
   {
     dirent = ((dirent_t*)(dirent_buffer + offset*sizeof(dirent_t)));
-    last_dirent->inode = dirent->inode;
-    strncpy(last_dirent->fname, dirent->fname, MAX_NAME);
+    last_dirent.inode = dirent->inode;
+    strncpy(last_dirent.fname, dirent->fname, MAX_NAME);
   } 
   
   if(status == 0)
   {
     //Check if the last directory entry was our child node entry 
-    if(last_dirent->inode != child_inode)
+    if(last_dirent.inode != child_inode)
     {
         //If not, then we need to go through all the entries one by one to find the child inode
         group = (parent->size % DIRENTS_PER_SECTOR == 0) ? parent->size/DIRENTS_PER_SECTOR : parent->size/DIRENTS_PER_SECTOR + 1;
@@ -631,8 +638,8 @@ int remove_inode(int type, int parent_inode, int child_inode)
                     if(child_inode == dirent->inode)
                     {
                         //Child inode found, copy the last inode to child inode's place
-                        dirent->inode = last_dirent->inode;
-                        strncpy(dirent->fname, last_dirent->fname, MAX_NAME);
+                        dirent->inode = last_dirent.inode;
+                        strncpy(dirent->fname, last_dirent.fname, MAX_NAME);
                         j = DIRENTS_PER_SECTOR;
                         i = group;
                         
@@ -640,7 +647,7 @@ int remove_inode(int type, int parent_inode, int child_inode)
                         //Update parent inode size, and write to disk
                         parent->size--;
                         if(offset == 0)
-                            status = bitmap_reset(SECTOR_BITMAP_START_SECTOR, SECTOR_BITMAP_SECTORS, parent->data[group-1];    
+                            status = bitmap_reset(SECTOR_BITMAP_START_SECTOR, SECTOR_BITMAP_SECTORS, parent->data[group-1]);    
                         status = Disk_Write(parent->data[i], dirent_buffer);
                         //Update the parent inode object and write to disk
                         if(status == 0)
@@ -660,11 +667,10 @@ int remove_inode(int type, int parent_inode, int child_inode)
         //Update the parent inode object and update the inode table  
         parent->size--;
         if(offset == 0)
-            status = bitmap_reset(SECTOR_BITMAP_START_SECTOR, SECTOR_BITMAP_SECTORS, parent->data[group-1];   
+            status = bitmap_reset(SECTOR_BITMAP_START_SECTOR, SECTOR_BITMAP_SECTORS, parent->data[group-1]);   
  
         if(status == 0)
             status = Disk_Write(inode_sector, inode_buffer);
-        break;
     }
   }
 
@@ -676,18 +682,17 @@ int remove_inode(int type, int parent_inode, int child_inode)
   }
 
   // load the disk sector containing the child inode
-  int inode_sector = INODE_TABLE_START_SECTOR+child_inode/INODES_PER_SECTOR;
-  char inode_buffer[SECTOR_SIZE];
+  inode_sector = INODE_TABLE_START_SECTOR+child_inode/INODES_PER_SECTOR;
   status = Disk_Read(inode_sector, inode_buffer);
   dprintf("... load inode table for child inode from disk sector %d\n", inode_sector);
 
   if(status == 0)
   {
       // get the child inode
-      int inode_start_entry = (inode_sector-INODE_TABLE_START_SECTOR)*INODES_PER_SECTOR;
-      int offset = child_inode-inode_start_entry;
+      inode_start_entry = (inode_sector-INODE_TABLE_START_SECTOR)*INODES_PER_SECTOR;
+      offset = child_inode-inode_start_entry;
       assert(0 <= offset && offset < INODES_PER_SECTOR);
-      inode_t* child = (inode_t*)(inode_buffer+offset*sizeof(inode_t));
+      child = (inode_t*)(inode_buffer+offset*sizeof(inode_t));
       //COmpare if type matches
       if(child->type != type)
         status = -3;
