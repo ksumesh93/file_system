@@ -1016,8 +1016,47 @@ int Dir_Create(char* path)
 
 int Dir_Unlink(char* path)
 {
-  /* YOUR CODE */
-  return -1;
+  int child_inode;
+  int parent_inode;
+  char fname[MAX_NAME];
+  int status = 0;
+  dprintf("Directory_Unlink('%s'):\n", path);
+
+  //Find the inode and parent inode of the given file
+  parent_inode = follow_path(path, &child_inode, fname);
+
+  //Check if file found
+  if(parent_inode < 0)
+  {
+    dprintf("Unable to follow path.\n");
+    status = -1;
+    osErrno = E_NO_SUCH_DIR;
+  }
+
+  //Check if file is open
+  if(status == 0)
+  {
+      if(child_inode == 0)
+      {
+        dprintf("Not Allowed to remove root directory.\n");
+        status = -1;
+        osErrno = E_ROOT_DIR;
+      }
+  }
+
+  //All checks have been passed so lets remove the file
+  if(status == 0)
+  {
+    status = remove_inode(1, parent_inode, child_inode);
+    dprintf("Removing directory.\n");
+  }
+
+  if(status == -2)
+  {
+    dprintf("Directory is not empty.\n");
+    osErrno = E_DIR_NOT_EMPTY;
+  }
+  return status;
 }
 
 int Dir_Size(char* path)
