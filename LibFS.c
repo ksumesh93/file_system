@@ -973,8 +973,81 @@ int File_Open(char* file)
 
 int File_Read(int fd, void* buffer, int size)
 {
-  /* YOUR CODE */
-  return -1;
+  int status = 0;
+  int open_file_inode = 0;
+  int open_file_pointer = 0;
+  int open_file_size = 0;
+  char inode_buffer[SECTOR_SIZE];
+  char sector_buffer[SECTOR_SIZE];
+  int offset = 0;
+  inode_t *file_inode;
+ 
+  //Bounds check
+  if(fd < MAX_OPEN_FILES)
+  {
+    //Read information of open files
+    open_file_inode = open_files[fd].inode;
+    open_file_size = open_files[fd].size;
+    open_file_pointer = open_files[fd].pos;
+  }
+  else
+  {
+    osErrno = E_BAD_FD;
+    status = -1;
+  }
+
+
+  if(status == 0) 
+  {
+    //Check the number of bytes to be read
+    if(size > open_file_size - open_file_pointer)
+        size = open_file_size - open_file_pointer;
+
+    //Retrieve the inode object from the inode number of the file  
+    // load the disk sector containing the child inode
+    int inode_sector = INODE_TABLE_START_SECTOR+open_file_inode/INODES_PER_SECTOR;
+    status = Disk_Read(inode_sector, inode_buffer);
+    dprintf("... load inode table for inode from disk sector %d\n", inode_sector);
+
+    if(status == 0)
+    {
+      // get the child inode
+      int inode_start_entry = (inode_sector-INODE_TABLE_START_SECTOR)*INODES_PER_SECTOR;
+      offset = open_file_inode-inode_start_entry;
+      assert(0 <= offset && offset < INODES_PER_SECTOR);
+      file_inode = (inode_t*)(inode_buffer+offset*sizeof(inode_t));
+      if(file_inode->size != open_file_size)
+        status = -1;
+    }
+  }
+  
+  if(status == 0)
+  {
+    //Find sector to read data from
+    int sector_index = open_file_pointer/SECTOR_SIZE;
+    int bytes_read = 0;
+    int to_read = 0;
+    offset = open_file_pointer - sector_index * SECTOR_SIZE;
+    while(bytes_read < size)
+    {
+        status = Disk_Read(file_inode->data[sector_index], sector_buffer);
+        if(status == 0)
+        {
+            to_read = (size - bytes_read > SECTOR_SIZE - offset) ? SECTOR_SIZE - offset : size - bytes_read;
+            memcpy((void *)((char *)buffer + bytes_read), (void *)(sector_buffer + offset), to_read);
+            bytes_read += to_read;
+        }
+        sector_index++;
+        offset = 0;
+    }
+    
+    open_file_pointer += size;
+    //Update the file pointer location in the open file table
+    open_files[fd].pos = open_file_pointer;
+    status = bytes_read;
+  }
+
+  return status;
 }
 
 int File_Write(int fd, void* buffer, int size)
