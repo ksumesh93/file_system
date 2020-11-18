@@ -888,8 +888,42 @@ int File_Create(char* file)
 
 int File_Unlink(char* file)
 {
-  /* YOUR CODE */
-  return -1;
+  int child_inode;
+  int parent_inode;
+  char fname[MAX_NAME];
+  int status = 0;
+  dprintf("File_Unlink('%s'):\n", file);
+
+  //Find the inode and parent inode of the given file
+  parent_inode = follow_path(file, &child_inode, fname);
+
+  //Check if file found
+  if(parent_inode < 0)
+  {
+    dprintf("Unable to follow path.\n");
+    status = -1;
+    osErrno = E_NO_SUCH_FILE;
+  }
+
+  //Check if file is open
+  if(status == 0)
+  {
+      if(is_file_open(child_inode))
+      {
+        dprintf("File in use.\n");
+        status = -1;
+        osErrno = E_FILE_IN_USE;
+      }
+  }
+
+  //All checks have been passed so lets remove the file
+  if(status == 0)
+  {
+    status = remove_inode(0, parent_inode, child_inode);
+    dprintf("Removing file.\n");
+  }
+  
+  return status;
 }
 
 int File_Open(char* file)
