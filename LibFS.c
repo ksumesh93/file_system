@@ -1291,6 +1291,8 @@ int Dir_Size(char* path)
           child = (inode_t*)(inode_buffer+offset*sizeof(inode_t));
       }
    }
+   else
+    status = -1;
 
    //GEt the size in bytes by multiplying the size of directory entry with total number of directory entries
    if(status == 0)
@@ -1301,8 +1303,70 @@ int Dir_Size(char* path)
 
 int Dir_Read(char* path, void* buffer, int size)
 {
-  /* YOUR CODE */
-  return -1;
+  int status = 0;
+  int parent_inode = -1;
+  int child_inode = -1;
+  char fname[MAX_NAME];
+  char dirent_buffer[SECTOR_SIZE];
+  inode_t *child;
+  int directory_size = Dir_Size(path);
+  int sectors;
+  int rem_size = 0;
+  int chunk_size = 0;
+  int copied = 0;
+  //Perform size check
+  if(size < directory_size)
+  {
+    osErrno = E_BUFFER_TOO_SMALL;
+    status = -1;
+  }
+
+
+  if(status == 0)
+    parent_inode = follow_path(path, &child_inode, fname);
+
+  //Get the inode of the directory 
+  if(parent_inode >= 0 && child_inode >= 0)
+  {
+      // load the disk sector containing the child inode
+      int inode_sector = INODE_TABLE_START_SECTOR+child_inode/INODES_PER_SECTOR;
+      char inode_buffer[SECTOR_SIZE];
+      status = Disk_Read(inode_sector, inode_buffer);
+      dprintf("... load inode table for child inode from disk sector %d\n", inode_sector);
+
+      if(status == 0)
+      {
+          // get the child inode
+          int inode_start_entry = (inode_sector-INODE_TABLE_START_SECTOR)*INODES_PER_SECTOR;
+          int offset = child_inode-inode_start_entry;
+          assert(0 <= offset && offset < INODES_PER_SECTOR);
+          child = (inode_t*)(inode_buffer+offset*sizeof(inode_t));
+      }
+   }
+   else
+    status = -1;
+
+  if(status == 0)
+  {
+    rem_size = size;
+    //FInd the number of sectors in this inode
+    sectors = (child->size % DIRENTS_PER_SECTOR == 0) ? child->size/DIRENTS_PER_SECTOR : child->size/DIRENTS_PER_SECTOR + 1;
+
+    //read all the sectors
+    for(int i = 0; i < sectors; i++)
+    {
+        status = Disk_Read(child->data[i], dirent_buffer);
+        if(status == 0)
+        {
+            chunk_size = (rem_size < DIRENTS_PER_SECTOR*sizeof(dirent_t)) ? rem_size : DIRENTS_PER_SECTOR*sizeof(dirent_t);
+            memcpy((void*)((char*)buffer + copied), dirent_buffer, chunk_size);
+            copied += chunk_size;
+            rem_size -= chunk_size;
+            status = child->size;
+        }
+    }
+  }
+  return status;
 }
 
 
