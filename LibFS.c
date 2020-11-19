@@ -1052,8 +1052,112 @@ int File_Read(int fd, void* buffer, int size)
 
 int File_Write(int fd, void* buffer, int size)
 {
-  /* YOUR CODE */
-  return -1;
+  int status = 0;
+  int open_file_inode = 0;
+  int open_file_pointer = 0;
+  int open_file_size = 0;
+  char inode_buffer[SECTOR_SIZE];
+  char sector_buffer[SECTOR_SIZE];
+  int offset = 0;
+  int inode_sector = 0;
+  inode_t *file_inode;
+ 
+  //Bounds check
+  if(fd < MAX_OPEN_FILES)
+  {
+    //Read information of open files
+    open_file_inode = open_files[fd].inode;
+    open_file_size = open_files[fd].size;
+    open_file_pointer = open_files[fd].pos;
+  }
+  else
+  {
+    osErrno = E_BAD_FD;
+    status = -1;
+  }
+
+
+  if(status == 0) 
+  {
+    //Check if write size appropriate
+    if(size + open_file_size > MAX_FILE_SIZE)
+    {
+        status = -1;
+        osErrno = E_FILE_TOO_BIG;
+    }
+  }
+
+  if(status == 0)
+  {
+    //Retrieve the inode object from the inode number of the file  
+    // load the disk sector containing the file inode
+    inode_sector = INODE_TABLE_START_SECTOR+open_file_inode/INODES_PER_SECTOR;
+    status = Disk_Read(inode_sector, inode_buffer);
+    dprintf("... load inode table for inode from disk sector %d\n", inode_sector);
+
+    if(status == 0)
+    {
+      // get the file inode
+      int inode_start_entry = (inode_sector-INODE_TABLE_START_SECTOR)*INODES_PER_SECTOR;
+      offset = open_file_inode-inode_start_entry;
+      assert(0 <= offset && offset < INODES_PER_SECTOR);
+      file_inode = (inode_t*)(inode_buffer+offset*sizeof(inode_t));
+      if(file_inode->size != open_file_size)
+        status = -1;
+    }
+  }
+  
+  if(status == 0)
+  {
+    //Find sector to write data to
+    int sector_index = open_file_pointer/SECTOR_SIZE;
+    int bytes_written = 0;
+    int to_write = 0;
+    offset = open_file_pointer - sector_index * SECTOR_SIZE;
+    while(bytes_written < size && status == 0)
+    {
+        //Check if new sector is needed
+        if(open_file_size == open_file_pointer && open_file_pointer % SECTOR_SIZE == 0)
+        { 
+            int newsec = bitmap_first_unused(SECTOR_BITMAP_START_SECTOR, SECTOR_BITMAP_SECTORS, SECTOR_BITMAP_SIZE);
+            if(newsec < 0) {
+                dprintf("... error: disk is full\n");
+                osErrno = E_NO_SPACE;
+                status = -1;
+            }
+            else
+                file_inode->data[sector_index] = newsec;
+        }
+        if(status == 0)
+        {
+            //First load the sector into the buffer
+            status = Disk_Read(file_inode->data[sector_index], sector_buffer);
+            to_write = (size - bytes_written > SECTOR_SIZE - offset) ? SECTOR_SIZE - offset : size - bytes_written;
+            memcpy((void *)(sector_buffer + offset), (void *)((char *)buffer + bytes_written), to_write);
+            status = Disk_Write(file_inode->data[sector_index], sector_buffer);
+            bytes_written += to_write;
+            open_file_pointer += to_write;
+            open_file_size = (open_file_pointer > open_file_size) ? open_file_pointer : open_file_size; 
+            sector_index++;
+            offset = 0;
+        }
+    }
+    
+    //Update the file pointer location in the open file table
+    open_files[fd].size = open_file_size;
+    open_files[fd].pos = open_file_pointer;
+    file_inode->size = open_file_size;
+    //Update the file inode object in the inode table
+    status = Disk_Write(inode_sector, inode_buffer);
+    dprintf("... write inode table for inode from disk sector %d\n", inode_sector);
+    if(status == 0)
+        status = bytes_written;
+  }
+  
+  //Sync the disk
+  FS_Sync();
+
+  return status;
 }
 
 int File_Seek(int fd, int offset)
