@@ -1268,8 +1268,35 @@ int Dir_Unlink(char* path)
 
 int Dir_Size(char* path)
 {
-  /* YOUR CODE */
-  return 0;
+  int status = 0;
+  int child_inode;
+  char last_fname[MAX_NAME];
+  int parent_inode = follow_path(path, &child_inode, last_fname);
+  inode_t * child;
+
+  if(parent_inode >= 0 && child_inode >= 0)
+  {
+      // load the disk sector containing the child inode
+      int inode_sector = INODE_TABLE_START_SECTOR+child_inode/INODES_PER_SECTOR;
+      char inode_buffer[SECTOR_SIZE];
+      status = Disk_Read(inode_sector, inode_buffer);
+      dprintf("... load inode table for child inode from disk sector %d\n", inode_sector);
+
+      if(status == 0)
+      {
+          // get the child inode
+          int inode_start_entry = (inode_sector-INODE_TABLE_START_SECTOR)*INODES_PER_SECTOR;
+          int offset = child_inode-inode_start_entry;
+          assert(0 <= offset && offset < INODES_PER_SECTOR);
+          child = (inode_t*)(inode_buffer+offset*sizeof(inode_t));
+      }
+   }
+
+   //GEt the size in bytes by multiplying the size of directory entry with total number of directory entries
+   if(status == 0)
+        status = child->size * sizeof(dirent_t);
+
+   return status;
 }
 
 int Dir_Read(char* path, void* buffer, int size)
