@@ -1058,7 +1058,37 @@ int File_Write(int fd, void* buffer, int size)
 
 int File_Seek(int fd, int offset)
 {
-  /* YOUR CODE */
+  int status = 0;
+  int open_file_size = 0;
+  
+  //Bounds check
+  if(fd < MAX_OPEN_FILES)
+  {
+    //Read information of open files
+    open_file_size = open_files[fd].size;
+  }
+  else
+  {
+    osErrno = E_BAD_FD;
+    status = -1;
+  }
+
+  //If file is open we now check for bounds on offset
+  if(status == 0)
+  {
+    if(offset > open_file_size || offset < 0)
+    {
+        status = -1;
+        osErrno = E_SEEK_OUT_OF_BOUNDS; 
+    }
+    else
+    {
+    //Update the position of pointer in the open file table
+        open_files[fd].pos = offset;
+        status = offset;
+    }
+  }
+ 
   return 0;
 }
 
