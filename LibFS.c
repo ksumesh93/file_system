@@ -125,11 +125,11 @@ static void bitmap_init(int start, int num, int nbits)
 
   //Allocating memory from heap to create the bitmap which we shall then write to the disk
   //This gives us a bitmap with 0 written for all bits
-  temp_buffer = (char *) calloc(TOTAL_SECTORS, SECTOR_SIZE);
+  temp_buffer = (char *) calloc(num, SECTOR_SIZE);
 
   //Now we just need to set the first nbits to 1
   unsigned int nbytes = nbits / 8;
-  int rem_bits = 8 - nbits % 8;
+  int rem_bits = nbits % 8;
   int val = 255;
   if(nbytes > 0 && nbytes < max_size){
       memset((void *) temp_buffer, val, nbytes);
