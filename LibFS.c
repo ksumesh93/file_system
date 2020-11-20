@@ -308,7 +308,7 @@ static int illegal_filename(char* name)
     
   for(int i = 0; i < length; i++)
   {
-    if(name[i] >= 65 || name[i] <= 90 || name[i] >= 97 || name[i] <= 122 || name[i] >= 48 || name[i] <= 57 || name[i] == 45 || name[i] == 46 || name[i] == 95)
+    if((name[i] >= 65 && name[i] <= 90) || (name[i] >= 97 && name[i] <= 122) || (name[i] >= 48 && name[i] <= 57) || name[i] == 45 || name[i] == 46 || name[i] == 95)
         continue;
     else
     {
