@@ -264,7 +264,7 @@ static int bitmap_reset(int start, int num, int ibit)
         //Move the ibit location to adjust for the current sector we just read
         ibit = ibit - ibits_per_sector * sector_num;
         ibyte = ibit/8;
-        rem_bit = 8 - ibit % 8;
+        rem_bit = ibit % 8;
         //Read the byte which contains our bit
         temp_byte = *(temp_buffer + ibyte);
         //Modify
