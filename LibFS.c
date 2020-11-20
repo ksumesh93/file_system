@@ -571,6 +571,29 @@ int remove_inode(int type, int parent_inode, int child_inode)
   int group;
   inode_t* child;
 
+  // load the disk sector containing the child inode
+  inode_sector = INODE_TABLE_START_SECTOR+child_inode/INODES_PER_SECTOR;
+  status = Disk_Read(inode_sector, inode_buffer);
+  dprintf("... load inode table for child inode from disk sector %d\n", inode_sector);
+
+  if(status == 0)
+  {
+      // get the child inode
+      inode_start_entry = (inode_sector-INODE_TABLE_START_SECTOR)*INODES_PER_SECTOR;
+      offset = child_inode-inode_start_entry;
+      assert(0 <= offset && offset < INODES_PER_SECTOR);
+      child = (inode_t*)(inode_buffer+offset*sizeof(inode_t));
+      //COmpare if type matches
+      if(child->type != type)
+        status = -3;
+      //Check if it is a directory it should be empty
+      else if(child->type == 1 && child->size != 0)
+      {
+        dprintf("Directory %s is not empty.\n", child->fname);
+        status = -2;
+      }
+  }
+
   if(status == 0)
   {
       // get the disk sector containing the parent inode
@@ -634,14 +657,12 @@ int remove_inode(int type, int parent_inode, int child_inode)
             {
                 for(int j = 0; j < DIRENTS_PER_SECTOR && i*DIRENTS_PER_SECTOR + j < parent->size; j++)
                 {
-                    dirent = (dirent_t *) dirent_buffer;
+                    dirent = (dirent_t *) (dirent_buffer + j*sizeof(dirent_t));
                     if(child_inode == dirent->inode)
                     {
                         //Child inode found, copy the last inode to child inode's place
                         dirent->inode = last_dirent.inode;
                         strncpy(dirent->fname, last_dirent.fname, MAX_NAME);
-                        j = DIRENTS_PER_SECTOR;
-                        i = group;
                         
                         found = 1;
                         //Update parent inode size, and write to disk
@@ -653,6 +674,8 @@ int remove_inode(int type, int parent_inode, int child_inode)
                         if(status == 0)
                             status = Disk_Write(inode_sector, inode_buffer);
 
+                        j = DIRENTS_PER_SECTOR;
+                        i = group;
                         break;
                     }
                     else
@@ -675,31 +698,12 @@ int remove_inode(int type, int parent_inode, int child_inode)
   }
 
                 
-  if(found == 0)
+  if(found == 0 && status == 0)
   {
      dprintf("Child inode doesn't exist in the given parent inode\n");
      status = -1;
   }
 
-  // load the disk sector containing the child inode
-  inode_sector = INODE_TABLE_START_SECTOR+child_inode/INODES_PER_SECTOR;
-  status = Disk_Read(inode_sector, inode_buffer);
-  dprintf("... load inode table for child inode from disk sector %d\n", inode_sector);
-
-  if(status == 0)
-  {
-      // get the child inode
-      inode_start_entry = (inode_sector-INODE_TABLE_START_SECTOR)*INODES_PER_SECTOR;
-      offset = child_inode-inode_start_entry;
-      assert(0 <= offset && offset < INODES_PER_SECTOR);
-      child = (inode_t*)(inode_buffer+offset*sizeof(inode_t));
-      //COmpare if type matches
-      if(child->type != type)
-        status = -3;
-      //Check if it is a directory it should be empty
-      else if(child->type == 1 && child->size != 0)
-        status = -2;
-  }
   
   if(status == 0)
   {
