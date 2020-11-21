@@ -7,7 +7,7 @@
 #include "LibFS.h"
 
 // set to 1 to have detailed debug print-outs and 0 to have none
-#define FSDEBUG 0
+#define FSDEBUG 1
 
 #if FSDEBUG
 #define dprintf printf
@@ -131,7 +131,7 @@ static void bitmap_init(int start, int num, int nbits)
   unsigned int nbytes = nbits / 8;
   int rem_bits = nbits % 8;
   int val = 255;
-  if(nbytes > 0 && nbytes < max_size){
+  if(nbytes >= 0 && nbytes < max_size){
       memset((void *) temp_buffer, val, nbytes);
   
       //We have copied the number of bytes and now we need to set the remaining number of bits
@@ -147,9 +147,6 @@ static void bitmap_init(int start, int num, int nbits)
   for(int i = 0; i < num; i++)
     Disk_Write(start + i, temp_buffer + i * SECTOR_SIZE);
  
-  //Sync the disk with the file
-  FS_Sync();
-
   //Free the memory allocated from the heap
   free(temp_buffer);
 
@@ -162,7 +159,7 @@ static int bitmap_first_unused(int start, int num, int nbits)
 {
   //Creating an integer to keep track of the first found 0 in the bitmap
   int location = 0;
-    
+   int act_bits = 8*nbits; 
   //First we need to allocate a buffer with size equal to that of sector size so that we can read each sector
   char *temp_buffer;
   temp_buffer = (char *) calloc(1, SECTOR_SIZE);
@@ -181,13 +178,13 @@ static int bitmap_first_unused(int start, int num, int nbits)
             temp_byte = *(temp_buffer + j);
             
             //check if the byte has any zeros at all
-            if(temp_byte == 0xFF)
+            if(temp_byte == -1)
             {
                 //if there are no zero bits in this byte move the location pointer by 8 bits
                 location = location + 8;
 
                 //Check if the total size of bitmap has reached in which case we need to break and exit
-                if(location >= nbits)
+                if(location >= act_bits)
                 {
                     i = num;
                     location = -1;
@@ -204,7 +201,7 @@ static int bitmap_first_unused(int start, int num, int nbits)
                     {
                         location = location + k;
                         //Check if we have crossed the total size of the bitmap
-                        if(location >= nbits)
+                        if(location >= act_bits)
                             location = -1;
                         else
                         {
@@ -214,8 +211,6 @@ static int bitmap_first_unused(int start, int num, int nbits)
                             //Write the flipped value to Disk
                             if(Disk_Write(start + i, temp_buffer) != 0)
                                 location = -1;
-                            else
-                                FS_Sync();
                         }
                         j = SECTOR_SIZE;
                         i = num;
@@ -274,9 +269,6 @@ static int bitmap_reset(int start, int num, int ibit)
         //Write to disk
         if(Disk_Write(start + sector_num, temp_buffer) != 0)
             status = -1;
-        else
-            //Sync the disk
-            FS_Sync();
     }
     else
         status = -1;
@@ -560,7 +552,8 @@ int remove_inode(int type, int parent_inode, int child_inode)
   //Variable to track status of execution
   int status = 0;  
   int inode_sector;
-  char inode_buffer[SECTOR_SIZE];
+  char child_inode_buffer[SECTOR_SIZE];
+  char parent_inode_buffer[SECTOR_SIZE];
   int inode_start_entry;
   int offset;
   inode_t* parent;
@@ -573,7 +566,7 @@ int remove_inode(int type, int parent_inode, int child_inode)
 
   // load the disk sector containing the child inode
   inode_sector = INODE_TABLE_START_SECTOR+child_inode/INODES_PER_SECTOR;
-  status = Disk_Read(inode_sector, inode_buffer);
+  status = Disk_Read(inode_sector, child_inode_buffer);
   dprintf("... load inode table for child inode from disk sector %d\n", inode_sector);
 
   if(status == 0)
@@ -582,7 +575,7 @@ int remove_inode(int type, int parent_inode, int child_inode)
       inode_start_entry = (inode_sector-INODE_TABLE_START_SECTOR)*INODES_PER_SECTOR;
       offset = child_inode-inode_start_entry;
       assert(0 <= offset && offset < INODES_PER_SECTOR);
-      child = (inode_t*)(inode_buffer+offset*sizeof(inode_t));
+      child = (inode_t*)(child_inode_buffer+offset*sizeof(inode_t));
       //COmpare if type matches
       if(child->type != type)
         status = -3;
@@ -598,7 +591,7 @@ int remove_inode(int type, int parent_inode, int child_inode)
   {
       // get the disk sector containing the parent inode
       inode_sector = INODE_TABLE_START_SECTOR+parent_inode/INODES_PER_SECTOR;
-      status = Disk_Read(inode_sector, inode_buffer);
+      status = Disk_Read(inode_sector, parent_inode_buffer);
   }
   if(status == 0)
   {
@@ -609,7 +602,7 @@ int remove_inode(int type, int parent_inode, int child_inode)
       inode_start_entry = (inode_sector-INODE_TABLE_START_SECTOR)*INODES_PER_SECTOR;
       offset = parent_inode-inode_start_entry;
       assert(0 <= offset && offset < INODES_PER_SECTOR);
-      parent = (inode_t*)(inode_buffer+offset*sizeof(inode_t));
+      parent = (inode_t*)(parent_inode_buffer+offset*sizeof(inode_t));
       dprintf("... get parent inode %d (size=%d, type=%d)\n",
 	     parent_inode, parent->size, parent->type);
 
@@ -672,7 +665,7 @@ int remove_inode(int type, int parent_inode, int child_inode)
                         status = Disk_Write(parent->data[i], dirent_buffer);
                         //Update the parent inode object and write to disk
                         if(status == 0)
-                            status = Disk_Write(inode_sector, inode_buffer);
+                            status = Disk_Write(inode_sector, parent_inode_buffer);
 
                         j = DIRENTS_PER_SECTOR;
                         i = group;
@@ -685,15 +678,18 @@ int remove_inode(int type, int parent_inode, int child_inode)
         }
     }
     else
-    {   
+    {
+        found = 1;   
         //The last directory entry was the child inode entry we just need to remove that
         //Update the parent inode object and update the inode table  
-        parent->size--;
         if(offset == 0)
-            status = bitmap_reset(SECTOR_BITMAP_START_SECTOR, SECTOR_BITMAP_SECTORS, parent->data[group-1]);   
- 
+        {
+            group = parent->size/DIRENTS_PER_SECTOR;
+            status = bitmap_reset(SECTOR_BITMAP_START_SECTOR, SECTOR_BITMAP_SECTORS, parent->data[group]);   
+        }
+        parent->size--;
         if(status == 0)
-            status = Disk_Write(inode_sector, inode_buffer);
+            status = Disk_Write(inode_sector, parent_inode_buffer);
     }
   }
 
@@ -1158,9 +1154,6 @@ int File_Write(int fd, void* buffer, int size)
         status = bytes_written;
   }
   
-  //Sync the disk
-  FS_Sync();
-
   return status;
 }
 
@@ -1318,6 +1311,7 @@ int Dir_Read(char* path, void* buffer, int size)
   int rem_size = 0;
   int chunk_size = 0;
   int copied = 0;
+  char inode_buffer[SECTOR_SIZE];
   //Perform size check
   if(size < directory_size)
   {
@@ -1334,7 +1328,6 @@ int Dir_Read(char* path, void* buffer, int size)
   {
       // load the disk sector containing the child inode
       int inode_sector = INODE_TABLE_START_SECTOR+child_inode/INODES_PER_SECTOR;
-      char inode_buffer[SECTOR_SIZE];
       status = Disk_Read(inode_sector, inode_buffer);
       dprintf("... load inode table for child inode from disk sector %d\n", inode_sector);
 
