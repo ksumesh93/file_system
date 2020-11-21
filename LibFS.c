@@ -589,7 +589,7 @@ int remove_inode(int type, int parent_inode, int child_inode)
       //Check if it is a directory it should be empty
       else if(child->type == 1 && child->size != 0)
       {
-        dprintf("Directory %s is not empty.\n", child->inode);
+        dprintf("Directory is not empty.\n");
         status = -2;
       }
   }
