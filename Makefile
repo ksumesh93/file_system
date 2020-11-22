@@ -7,7 +7,7 @@ LIBS   = -R. -L. -lFS -lDisk
 SHLIBS = libDisk.so libFS.so
 
 SRCS   = main.c \
-	simple-test.c \
+	simple-test.c  test_mario.c\
 	slow-ls.c slow-mkdir.c slow-rmdir.c \
 	slow-touch.c slow-rm.c \
 	slow-cat.c slow-import.c slow-export.c
